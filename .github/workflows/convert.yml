@@ -4,12 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       url:
-        description: «Прямая ссылка на .xapk/.apks (оставь пустым, если файл лежит в папке input/)»
+        description: Прямая ссылка на xapk или apks (или пусто, если файл лежит в папке input)
         required: false
-        default: «»
   push:
     paths:
-      - «input/**»
+      - input/**
 
 jobs:
   convert:
@@ -20,36 +19,37 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: «17»
+          java-version: 17
 
       - uses: actions/setup-python@v5
         with:
-          python-version: «3.x»
+          python-version: 3.x
 
-      - name: Скачать файл по ссылке (если указана)
-        if: ${{ github.event.inputs.url != ‘’ }}
+      - name: Download file by link
         env:
           FILE_URL: ${{ github.event.inputs.url }}
         run: |
           mkdir -p input
-          curl -L —fail -o input/download.xapk «$FILE_URL»
+          if [ -n $FILE_URL ]; then
+            curl -L —fail -o input/download.xapk $FILE_URL
+          fi
 
-      - name: Конвертировать
+      - name: Convert
         run: |
           mkdir -p output
-          shopt -s nullglob
-          files=(input/*.xapk input/*.apks input/*.apkm)
-          if [ ${#files[@]} -eq 0 ]; then
-            echo «В папке input/ нет файлов и не указана ссылка»
+          count=0
+          for f in input/*.xapk input/*.apks input/*.apkm; do
+            [ -e $f ] || continue
+            name=$(basename ${f%.*})
+            python xapk2apk.py $f -o output/$name.apk
+            count=$((count+1))
+          done
+          if [ $count -eq 0 ]; then
+            echo No files found in input
             exit 1
           fi
-          for f in «${files[@]}»; do
-            name=$(basename «${f%.*}»)
-            python xapk2apk.py «$f» -o «output/$name.apk»
-          done
-          mv input/*_obb output/ 2>/dev/null || true
 
-      - name: Выложить результат
+      - name: Upload result
         uses: actions/upload-artifact@v4
         with:
           name: apk-result
