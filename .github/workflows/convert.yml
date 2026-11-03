@@ -1,0 +1,57 @@
+name: XAPK to APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Прямая ссылка на xapk или apks (или пусто, если файл лежит в папке input)
+        required: false
+  push:
+    paths:
+      - input/**
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+
+      - name: Download file by link
+        env:
+          FILE_URL: ${{ github.event.inputs.url }}
+        run: |
+          mkdir -p input
+          if [ -n $FILE_URL ]; then
+            curl -L —fail -o input/download.xapk $FILE_URL
+          fi
+
+      - name: Convert
+        run: |
+          mkdir -p output
+          count=0
+          for f in input/*.xapk input/*.apks input/*.apkm; do
+            [ -e $f ] || continue
+            name=$(basename ${f%.*})
+            python xapk2apk.py $f -o output/$name.apk
+            count=$((count+1))
+          done
+          if [ $count -eq 0 ]; then
+            echo No files found in input
+            exit 1
+          fi
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-result
+          path: output/
+          retention-days: 7
